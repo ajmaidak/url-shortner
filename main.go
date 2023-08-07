@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -19,8 +20,11 @@ func setupRouter() *gin.Engine {
 	r := gin.Default()
 
 	var ctx = context.Background()
+
+	redisAddr := os.Getenv("REDIS_ADDRESS")
+
 	redisDB := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     redisAddr,
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
