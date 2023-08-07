@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 var db = make(map[string]string)
@@ -16,6 +18,13 @@ func setupRouter() *gin.Engine {
 	gin.DisableConsoleColor()
 	r := gin.Default()
 
+	var ctx = context.Background()
+	redisDB := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
 	r.GET("/ping", func(c *gin.Context) {
 		c.String(http.StatusOK, "pong")
 	})
@@ -23,11 +32,13 @@ func setupRouter() *gin.Engine {
 	// Serve a link redirect
 	r.GET("/:link", func(c *gin.Context) {
 		link := c.Params.ByName("link")
-		url, ok := db[link]
-		if ok {
+		url, err := redisDB.Get(ctx, link).Result()
+		if err == nil {
 			c.Redirect(http.StatusFound, url)
-		} else {
+		} else if err == redis.Nil {
 			c.String(http.StatusNotFound, "No URL associated with %s", link)
+		} else {
+			c.String(http.StatusInternalServerError, "database connection error")
 		}
 	})
 
@@ -36,13 +47,15 @@ func setupRouter() *gin.Engine {
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Interal Server Error")
 		}
-
 		// Calculate the SHA256 hash
 		hash := sha256.Sum256(url)
 		// Get the first 5 characters of the hash
 		shortUrl := fmt.Sprintf("%x", hash)[:5]
 
-		db[shortUrl] = string(url)
+		err = redisDB.Set(ctx, shortUrl, string(url), 0).Err()
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Database Connection Error")
+		}
 		c.String(http.StatusOK, "Short URL is: %s", shortUrl)
 	})
 
