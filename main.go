@@ -12,8 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var db = make(map[string]string)
-
 func setupRouter() *gin.Engine {
 
 	gin.DisableConsoleColor()
@@ -61,6 +59,24 @@ func setupRouter() *gin.Engine {
 			c.String(http.StatusInternalServerError, "Database Connection Error")
 		}
 		c.String(http.StatusOK, "Short URL is: %s", shortUrl)
+	})
+
+	r.GET("/dumpurls", func(c *gin.Context) {
+		db := make(map[string]string)
+		iter := redisDB.Scan(ctx, 0, "", 0).Iterator()
+		for iter.Next(ctx) {
+			shortUrl := iter.Val()
+			Url, err := redisDB.Get(ctx, shortUrl).Result()
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Database Connection Error")
+			}
+			db[shortUrl] = Url
+		}
+		if err := iter.Err(); err != nil {
+			c.String(http.StatusInternalServerError, "Redis Iteration Error")
+		}
+
+		c.JSON(http.StatusOK, db)
 	})
 
 	return r
